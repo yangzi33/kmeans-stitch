@@ -1,0 +1,188 @@
+---
+title: "Creating Cross-Stitch Patterns of Images Using K-Means Clustering"
+subtitle: "STA314H1 - Fall 2020"
+author: "Ziyue Yang"
+date: "November 3^rd^, 2020"
+output: pdf_document
+---
+
+```{r knitsetup, include = FALSE}
+knitr::opts_chunk$set(warning = FALSE)
+```
+
+# Introduction
+
+This article demonstrates how to make a cross-stitch pattern of images, based on 
+the k-means clustering algorithm.
+
+## Setup
+
+It is required for you to use the following libraries. Note that if you don't have any of these, undo the commenting before you run:
+
+```{r libraries, message=FALSE}
+# Uncomment the following if need to install libraries
+# install.packages("imager")
+# install.packages("tidyverse")
+# install.packages("tidymodels")
+# install.packages("sp")
+# install.packages("scales")
+# install.packages("cowplot") 
+# devtools::install_github("sharlagelfand/dmc")
+
+library(imager)
+library(tidyverse)
+library(tidymodels)
+library(sp)
+library(scales)
+library(cowplot)
+library(dmc)
+```
+
+In addition, we load the script `functions.R`, which will provide us the functions we are going to demonstrate:
+
+```{r loadfunctions}
+source('functions.R')
+```
+
+The script `functions.R` contains the following functions:
+
+a. `process_image()`
+
+b. `scree_plot()`
+
+c. `colour_strips()`
+
+d. `make_pattern()`
+
+For demonstration, let's make a cross-stitch pattern of a Warhol screenprint of Elizabeth Taylor:
+
+```{r}
+plot(imager::load.image('sakura.jpg'))
+```
+
+## Workflow
+
+Our work flow can be briefly described as:
+
+$$\text{Get Cluster Data for Multiple }K's \rightarrow \text{Choose Ideal }K\rightarrow \text{Make Cross-Stitch Pattern with Chosen $K$.} $$
+
+# Generating Cross-Stitch Patterns
+
+Before we begin, let's go over the functions we need to make a cross-stitch pattern.
+
+## `process_image()`
+
+Function `process_image()` allows us to retrieve the cluster information based on a list of k's.
+
+This function takes two inputs:
+
+- `image_file_name`: the path of the image you want to cluster;
+
+- `k_list`: a list of numbers of centers in the clustering. For instance, if we want to cluster the image with 2, 3, 7 
+cluster centers respectively, then `k_list` takes `c(2, 3, 7)` as the input.
+
+Calling the function as shown below allows us to retrieve the clustering information
+of the Warhol picture, from 1 to 10 cluster centers. We want to choose the best number of cluster centers later:
+
+```{r}
+cluster_info <- process_image('sakura.jpg', c(5:6))
+```
+
+The output of `process_image()` stores information in variable `cluster_info`, for every k in `k_list`. 
+
+For each k, the output contains
+
+- `kclust`: the output of calling `kmeans(x = select(image_dat, c(-x, -y)), centers = .x, nstart = 5)`;
+
+- `tidied`: the tidied data of `kclust`, i.e. `tidy(kclust)`;
+
+- `glanced`: the `glance` of `kclust`.
+
+Let's check the output of each of the above, for `k = 2`:
+
+```{r}
+cluster_info$kclust[[2]]
+cluster_info$tidied[[2]]
+cluster_info$glanced[[2]]
+```
+
+**Note**: From now on, `cluster_info` will store all the clustering information
+of the Warhol image, which will be used as the input for the following functions.
+
+## `scree_plot`
+
+This function takes the input `cluster_info`, as produces a scree plot based on 
+`glanced`:
+
+and returns a scree plot, with respect to the maximum numbers of cluster centers in `k_list` we inputted for `process_image()` (10 in this case):
+
+```{r}
+scree_plot(cluster_info)
+```
+
+Note that it's hard to tell what number of centers to choose based on scree plot. Let's try the ratio version:
+
+```{r}
+clusterings <- cluster_info %>% unnest(cols = c(glanced))
+nclust = length(clusterings$k) 
+ratio = rep(NA, nclust-1)
+for (kk in 2:nclust) {
+  ratio[kk-1] = clusterings$tot.withinss[kk]/clusterings$tot.withinss[kk-1] 
+}
+plot_data <- data.frame(k = clusterings$k[2:nclust],ratio)
+ggplot(plot_data, aes(x = k, y = ratio)) + geom_line()
+```
+
+From which we can tell that the number of clusters seems to be 5.
+
+## `colour_strips()`
+
+This function takes the input `cluster_info`, and produces the DMC colour strips that are closest to the RGB colours of cluster centers,  for each k in `k_list`.
+
+```{r}
+colour_strips(cluster_info)
+```
+
+Looks like 5 is a good option. Let's use 5 centers to make our cross-stitch pattern!
+
+## `make_pattern()`
+
+Finally, this function allows us to plot the cross-stitch of our image. This function
+takes several inputs:
+
+- `cluster_info`: The output of `process_image`.
+
+- `k`: The number of cluster centers.
+
+- `x_size`: The total number of possible stitches in the horizontal direction.
+
+- `black_white`: The logical value indicating whether the cross-sitch will be plotted in 
+black and white. Default is `FALSE`, such that we have a cross-stitch where the i^th cluster has 
+the DMC colour that is closest to the RGB colour of the i^th^ cluster center.
+
+- `background_colour`: The colour of the background. Default is `NULL`, such that we have 
+a transparent background.
+
+Here is where things are getting exciting. Let's make a $60\times 60$ colourful cross-stitch of Elizabeth Taylor's picture, with 4 cluster centers:
+
+```{r}
+make_pattern(cluster_info, 6, 100)
+```
+
+or, if we prefer a black-and-white version:
+
+```{r}
+make_pattern(cluster_info, 5, 60, black_white = TRUE)
+```
+
+Furthermore, we can make a colourful one with light green blackground:
+
+```{r}
+make_pattern(cluster_info, 5, 60, background_colour = "light green")
+```
+
+# Session Information
+
+```{r, echo = FALSE}
+sessionInfo()
+```

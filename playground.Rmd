@@ -1,0 +1,461 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(imager)
+library(tidyverse)
+library(tidymodels)
+library(sp)
+library(scales)
+library(cowplot) #devtools::install_github("sharlagelfand/dmc")
+library(dmc)
+```
+
+
+```{r}
+process_image <- function(image_file_name, k_list) {
+  img <- imager::load.image('warhol.jpeg')
+  # Getting RGB info and store as data frame
+  rgb_df <- as.data.frame(img, wide = "c") %>% 
+  rename(R = c.1, G = c.2, B = c.3) %>%
+  select(c(-x, -y))
+
+  kclust <- kmeans(rgb_df, centers = k_list, nstart = 5)
+  ret_tb <- tidy(kclust) %>%
+  mutate(RGB = rgb(R, G, B),        # Storing RGB in a column
+         DMC = map(RGB, ~ dmc(.x))) # Storing DMC info based on corresponding RGB
+    
+  return(ret_tb)
+}
+
+# Using k = 4
+cluster_info <- process_image('warhol.jpeg', 4)
+
+head(cluster_info)
+
+```
+
+
+
+```{r}
+img <- imager::load.image('warhol.jpeg')
+  # Getting RGB info and store as data frame
+image_dat <- as.data.frame(img, wide = "c") %>% 
+  rename(R = c.1, G = c.2, B = c.3) 
+  # select(-c(x, y))
+
+km <- tidy(kmeans(x = image_dat, centers = 2, nstart = 5))
+
+k_list = c(2)
+
+kclusts <-
+  tibble(k = k_list) %>%
+  mutate(
+    kclust = map(k, ~kmeans(x = select(image_dat, c(-x, -y)), centers = .x, nstart = 5)),
+    # # tidy_with_dmc = map(k, ~(tidy(kmeans(x = rgb_dat, centers = .x, nstart = 5)) %>% 
+    #                   mutate(DMC = map(rgb(R, G, B), ~dmc(.x))))),
+    tidied = map(kclust, ~(tidy(.x) %>% mutate(RGB = rgb(R, G, B),
+                                               DMC = map(RGB, ~dmc(.x)$hex)))
+                 ),
+    glanced = map(kclust, glance),
+)
+
+f <- kclusts$centers
+f$x
+ff <- kclusts$kclust
+
+###############################
+
+kclusts <- 
+  tibble(k = k_list) %>%
+  mutate(
+    k_clust = map(k, ~kmeans(x = select(image_dat, c(-x, -y)), centers = .x, nstart = 5)),
+  )
+
+kclusts$k_clust[[1]]$centers[1]
+
+for (k in k_list) {
+  curr_clust <- kclusts$k_clust[[k]]
+  # for (cen in 1:nrow(curr_clust$centers)) {
+    curr_clust$DMC[cen] <- dmc(rgb(curr_clust$centers[1],
+                               curr_clust$centers[2],
+                               curr_clust$centers[3]))$hex
+  # }
+}
+
+kclusts <- kclusts %>% 
+  mutate(
+    tidied = map(k, ~(
+      augment(kclusts$k_clust[[.x]], image_dat) %>% rename(cluster = .cluster) %>% mutate(RGB = rgb(R, G, B))
+                      )))
+
+
+
+kclusts <- 
+  tibble(k = k_list) %>%
+  mutate(
+    kclust = map(k, ~kmeans(x = select(image_dat, c(-x, -y)), centers = .x, nstart = 5)),
+    glanced = map(kclust, glance),
+    tidied = map(k, ~(
+      tidy(kclust[[.x]]) %>% mutate(RGB = rgb(R, G, B),
+                                            DMC = c(""))
+      # augment(kclusts$kclust[[.x]], image_dat) %>% 
+      #   rename(cluster = .cluster) %>% 
+      #   mutate(RGB = rgb(R, G, B))
+    ))
+  )
+
+for (k in k_list) {
+  curr_tidied <- kclusts$tidied[[k]]
+  for (cen in 1:length(curr_tidied$RGB)) {
+    curr_tidied$DMC[cen] <- dmc(curr_tidied$RGB[cen])$hex
+  }
+}
+
+
+
+
+
+
+
+single_clust <- kmeans(x = image_dat, centers = 2, nstart = 5)
+
+
+################################################
+  
+for (cen in 1:nrow(single_clust$centers)) {
+  single_clust$DMC[cen] <- dmc(rgb(single_clust$centers[cen, 3],
+                                   single_clust$centers[cen, 4],
+                                   single_clust$centers[cen, 5]))$hex
+}
+
+tidied <- augment(single_clust, image_dat) %>% rename(cluster = .cluster) %>% mutate(RGB = rgb(R, G, B))
+
+
+###############################
+
+k = 3
+
+cluster_info$kclust[[k]] %>% ggplot(aes(x = x, y = y)) + 
+  geom_point(aes(shape = .cluster,
+             col = .cluster)) + 
+  scale_y_reverse() + theme_void() +
+  scale_colour_manual(values = cluster_info$tidied[[k]] %>% select(DMC) %>% deframe,
+                      label = cluster_info$kclust[[k]] %>% select(.cluster) %>% deframe) + 
+  theme(panel.background = element_rect(fill = NULL,
+                                colour = NULL))
+
+
+cluster_info$tidied[[k]]$cluster
+
+
+
+
+
+
+
+
+
+
+
+
+############################### SINGLE CLUSTER
+
+single_clust <- kmeans(x = image_dat, centers = 2, nstart = 5)
+  
+for (cen in 1:nrow(single_clust$centers)) {
+  single_clust$DMC[cen] <- dmc(rgb(single_clust$centers[cen, 3],
+                                   single_clust$centers[cen, 4],
+                                   single_clust$centers[cen, 5]))$hex
+}
+
+tidied <- augment(single_clust, image_dat) %>% rename(cluster = .cluster) %>% mutate(RGB = rgb(R, G, B))
+
+###############################
+
+
+
+
+
+
+rgb(single_clust$centers[1, 3], single_clust$centers[1, 4])
+
+nrow(single_clust$centers)
+single_clust$centers[1,5]
+
+tidied <- augment(single_clust, image_dat) %>% rename(cluster = .cluster) %>% mutate(RGB = rgb(R, G, B))
+
+center_col <- 
+
+[cluster]
+  
+tidied <- tidied %>% mutate(DMC = )
+# for (i in c(1:nrow(tidied))) {
+#   i_cluster <- tidied$cluster[i][1]
+#   center_color <-  rgb(single_clust$centers[i_cluster, 3], 
+#                        single_clust$centers[i_cluster, 4], 
+#                        single_clust$centers[i_cluster, 5])
+#   tidied$DMC[i] <- dmc(center_color)$hex
+# }
+
+dmc(tidied$RGB[1])$hex
+
+class(dmc("#FFFBBB")$hex)
+
+f <- single_clust$centers
+
+
+
+
+
+#####################################
+# %>% unnest(cols = c(tidied))
+
+
+ggplot(f, aes(x, y)) + geom_point()
+
+a <- head(kclusts[2])
+
+kclust <- tibble(k_list) %>%
+  kmeans(rgb_df, centers = k_list, nstart = 5)
+ret_tb <- tidy(kclust) %>%
+  mutate(RGB = rgb(R, G, B),
+         DMC = map(RGB, ~ dmc(.x)))
+
+head(tidy(kclust))
+
+kclust
+
+show_col(ret_tb$RGB)
+
+head(centers)
+
+cluster_info <- process_image("warhol.jpeg", c(1:4))
+
+ncol = length(cluster_info$DMC)
+cluster_info$RGB
+
+
+
+```
+
+
+
+
+```{r}
+cluster_info$tidied[[2]]$DMC
+n_col = length(cluster_info$tidied[[2]]$DMC)
+n_col
+
+rect_dat <- tibble(x1 = c(0:(n_col-1)), x2 = c(1:n_col), y1 = rep(0,n_col),
+                       y2 =rep(1,n_col), colour = cluster_info$tidied[[1]]$DMC)
+    
+    rect_dat %>% ggplot() + coord_fixed() +
+      geom_rect(aes(xmin=x1, xmax=x2, ymin=y1, ymax=y2, fill=colour), color=rect_dat$colour) + 
+      geom_text(aes(x=x1+(x2-x1)/2, y=y1+(y2-y1)/2, label=colour), size=24/n_col) +
+      scale_fill_manual(values = rect_dat$colour)+ theme_void() + 
+      theme(legend.position = "none")
+```
+
+
+
+
+
+```{r}
+for (k in c(1:3)){
+n_col = length(cluster_info$tidied[[k]]$DMC)
+rect_dat <- tibble(x1 = c(0: (n_col - 1)), x2 = c(1: n_col), y1 = rep(0, n_col),
+                   y2 = rep(1, n_col), colour = cluster_info$tidied[[k]]$DMC)
+ggplot(rect_dat) + coord_fixed() +
+  geom_rect(aes(xmin = x1, xmax = x2, ymin = y1, ymax = y2, fill = colour)) + 
+  geom_text(aes(x = x1 + (x2 - x1) / 2, y = y1 + (y2 - y1) / 2, label = colour), size = 24 / n_col, colour = "white") + 
+  scale_fill_manual(values = rect_dat$colour) + theme_void() + theme(legend.position = "none")
+}
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
